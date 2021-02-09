@@ -8,6 +8,8 @@ K8S_CONFIG_SOURCE=${BASH_SOURCE[0]}
 K8S_NUM_GPU=2  # max of 2 (contact ETS to raise limit)
 K8S_NUM_CPU=8  # max of 8 ("")
 K8S_GB_MEM=64  # max of 64 ("")
+K8S_TIMEOUT_SECONDS=(3600*12) # note: be careful with this! 48h timeout should be max.
+
 
 # Controls whether an interactive Bash shell is started
 SPAWN_INTERACTIVE_SHELL=YES
