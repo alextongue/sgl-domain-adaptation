@@ -1,1 +1,5 @@
 .vscode
+.ipynb*
+__*
+code/data/
+code/SGL-darts/search-*
