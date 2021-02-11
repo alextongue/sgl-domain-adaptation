@@ -17,9 +17,11 @@ LABEL maintainer="UC San Diego ITS/ETS <ets-consult@ucsd.edu>"
 USER root
 
 RUN apt-get -y install htop
-RUN curl -s -L https://nvidia.github.io/nvidia-docker/centos7/nvidia-docker.repo | sudo tee /etc/yum.repos.d/nvidia-docker.repo
-RUN yum clean expire-cache
-RUN yum install -y nvidia-docker2
+RUN yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo
+RUN yum clean all
+RUN yum -y install nvidia-driver-latest-dkms cuda
+RUN yum -y install cuda-drivers
+
 
 # 3) install packages
 RUN pip install --no-cache-dir networkx scipy python-louvain mmcv-full
