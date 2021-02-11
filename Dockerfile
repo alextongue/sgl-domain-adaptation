@@ -17,7 +17,7 @@ LABEL maintainer="UC San Diego ITS/ETS <ets-consult@ucsd.edu>"
 USER root
 
 RUN apt-get -y install htop
-RUN apt-get install -y nvidia-smi
+RUN apt-get install -y nvidia-docker2
 
 # 3) install packages
 RUN pip install --no-cache-dir networkx scipy python-louvain mmcv-full
