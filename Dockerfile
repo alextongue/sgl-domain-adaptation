@@ -28,8 +28,8 @@ RUN apt-get update && apt-get install -y htop byobu
 RUN pip install --no-cache-dir networkx scipy python-louvain mmcv-full
 
 # 4) change back to notebook user
-COPY /run_jupyter.sh /
-RUN chmod 755 /run_jupyter.sh
+#COPY /run_jupyter.sh /
+#RUN chmod 755 /run_jupyter.sh
 USER $NB_UID
 
 # Override command to disable running jupyter notebook at launch
