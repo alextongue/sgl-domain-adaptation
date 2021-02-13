@@ -16,8 +16,7 @@ LABEL maintainer="UC San Diego ITS/ETS <ets-consult@ucsd.edu>"
 # 2) change to root to install packages
 USER root
 
-RUN apt-get -y install htop
-RUN apt-get -y install byobu
+RUN apt-get update && apt-get install -y htop byobu
 # RUN yum -y install yum-utils
 # RUN yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo
 # RUN yum clean all
