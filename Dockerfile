@@ -17,11 +17,12 @@ LABEL maintainer="UC San Diego ITS/ETS <ets-consult@ucsd.edu>"
 USER root
 
 RUN apt-get -y install htop
-RUN yum -y install yum-utils
-RUN yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo
-RUN yum clean all
-RUN yum -y install nvidia-driver-latest-dkms cuda
-RUN yum -y install cuda-drivers
+RUN apt-get -y install byobu
+# RUN yum -y install yum-utils
+# RUN yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo
+# RUN yum clean all
+# RUN yum -y install nvidia-driver-latest-dkms cuda
+# RUN yum -y install cuda-drivers
 
 
 # 3) install packages
