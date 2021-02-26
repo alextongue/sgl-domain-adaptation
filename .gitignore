@@ -146,3 +146,7 @@ aa_run_sgl.sh
 
 # vscode
 .vscode
+.ipynb*
+__*
+code/data/
+code/SGL-darts/search-*
