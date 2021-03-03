@@ -34,6 +34,15 @@ DARTSV2 | 574 | 26.7 | 8.7 | 1.0
 SNAS    | 522 | 27.3 | 9.3 |1.5
 PC-DARTS | 597 | **24.2** | **7.3** | 3.8
 
+### Validation Results ( from search only ) on MNIST with 5 epochs
+Method | Top-1 Error(%) | Top-5 Error(%) | Time
+PC-DARTS | 99.0 | 99.8 | 40min
+
+### Validation Results ( from search only ) on MNIST-M with 5 epochs
+Method | Top-1 Error(%) | Top-5 Error(%) | Time
+PC-DARTS | 97.2 | 99.9 | 40min
+
+
 Search a good arcitecture on ImageNet by using the search space of DARTS(**First Time!**).
 ## Usage
 #### Search on CIFAR10
@@ -42,6 +51,22 @@ To run our code, you only need one Nvidia 1080ti(11G memory).
 ```
 python train_search.py \\
 ```
+
+#### Search on MNIST
+To run PC-DARTS on MNIST dataset run the following command:
+```
+python train_search.py --epochs=5 --batch_size=64 --set='mnist'
+```
+
+#### Search on MNIST-M
+To run PC-DARTS on MNIST-M dataset run the following command:
+```
+python train_search.py --epochs=5 --batch_size=64 --set='mnistm'
+```
+Note this requires the MNIST-M dataset to be downloaded manually and stored in the data root folder  
+which by default is at `../../../data` relative to this directory. The MNIST-M dataset can be downloaded  
+from here: https://drive.google.com/drive/folders/0B_tExHiYS-0vR2dNZEU4NGlSSW8.
+
 #### Search on ImageNet
 
 Data preparation: 10% and 2.5% images need to be random sampled prior from earch class of trainingset as train and val, respectively. The sampled data is save into `./imagenet_search`.

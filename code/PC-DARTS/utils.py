@@ -78,6 +78,26 @@ def _data_transforms_cifar10(args):
     ])
   return train_transform, valid_transform
 
+def _data_transforms_mnist( args ):
+    image_size = 28
+    train_transform = transforms.Compose([
+        transforms.Resize(image_size),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.1307,), std=(0.3081,))
+    ])
+    # use train_transform for both training and validation
+    return train_transform, train_transform
+
+def _data_transforms_mnistm( args ):
+    image_size = 28
+    train_transform = transforms.Compose([
+        transforms.Resize(image_size),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+    ])
+    # use train_transform for both training and validation
+    return train_transform, train_transform
+
 
 def count_parameters_in_MB(model):
   return np.sum(np.prod(v.size()) for name, v in model.named_parameters() if "auxiliary" not in name)/1e6

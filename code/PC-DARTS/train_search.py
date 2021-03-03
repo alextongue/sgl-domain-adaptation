@@ -12,14 +12,16 @@ import torch.utils
 import torch.nn.functional as F
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
+import time
 
 from torch.autograd import Variable
 from model_search import Network
 from architect import Architect
+from dataset import get_train_dataset
 
 
 parser = argparse.ArgumentParser("cifar")
-parser.add_argument('--data', type=str, default='../data', help='location of the data corpus')
+parser.add_argument('--data', type=str, default='../../../data', help='location of the data corpus')
 parser.add_argument('--set', type=str, default='cifar10', help='location of the data corpus')
 parser.add_argument('--batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
@@ -58,6 +60,8 @@ logging.getLogger().addHandler(fh)
 CIFAR_CLASSES = 10
 if args.set=='cifar100':
     CIFAR_CLASSES = 100
+
+
 def main():
   if not torch.cuda.is_available():
     logging.info('no gpu device available')
@@ -84,25 +88,21 @@ def main():
       momentum=args.momentum,
       weight_decay=args.weight_decay)
 
-  train_transform, valid_transform = utils._data_transforms_cifar10(args)
-  if args.set=='cifar100':
-      train_data = dset.CIFAR100(root=args.data, train=True, download=True, transform=train_transform)
-  else:
-      train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
+  train_data = get_train_dataset( args )
 
-  num_train = len(train_data)
+  num_train = len(train_data) // 1
   indices = list(range(num_train))
   split = int(np.floor(args.train_portion * num_train))
 
   train_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-      pin_memory=True, num_workers=2)
+      pin_memory=True, num_workers=8)
 
   valid_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
-      pin_memory=True, num_workers=2)
+      pin_memory=True, num_workers=8)
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
@@ -110,7 +110,6 @@ def main():
   architect = Architect(model, args)
 
   for epoch in range(args.epochs):
-    scheduler.step()
     lr = scheduler.get_lr()[0]
     logging.info('epoch %d lr %e', epoch, lr)
 
@@ -130,6 +129,8 @@ def main():
       logging.info('valid_acc %f', valid_acc)
 
     utils.save(model, os.path.join(args.save, 'weights.pt'))
+    scheduler.step()
+  print( 'Experiment Dir:', args.save )
 
 
 def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch):
@@ -137,23 +138,25 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
   top1 = utils.AvgrageMeter()
   top5 = utils.AvgrageMeter()
 
+  valid_queue_iter = iter( valid_queue )
   for step, (input, target) in enumerate(train_queue):
     model.train()
     n = input.size(0)
     input = Variable(input, requires_grad=False).cuda()
-    target = Variable(target, requires_grad=False).cuda(async=True)
+    target = Variable(target, requires_grad=False).cuda(non_blocking=True)
 
     # get a random minibatch from the search queue with replacement
-    input_search, target_search = next(iter(valid_queue))
+    input_search, target_search = next(valid_queue_iter)
     #try:
     #  input_search, target_search = next(valid_queue_iter)
     #except:
     #  valid_queue_iter = iter(valid_queue)
     #  input_search, target_search = next(valid_queue_iter)
     input_search = Variable(input_search, requires_grad=False).cuda()
-    target_search = Variable(target_search, requires_grad=False).cuda(async=True)
+    target_search = Variable(target_search, requires_grad=False).cuda(non_blocking=True)
 
-    if epoch>=15:
+    #if epoch>=15:
+    if epoch>=1:
       architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
 
     optimizer.zero_grad()
@@ -161,13 +164,13 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
     loss = criterion(logits, target)
 
     loss.backward()
-    nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
+    nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
     optimizer.step()
 
     prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-    objs.update(loss.data[0], n)
-    top1.update(prec1.data[0], n)
-    top5.update(prec5.data[0], n)
+    objs.update(loss.item(), n)
+    top1.update(prec1.item(), n)
+    top5.update(prec5.item(), n)
 
     if step % args.report_freq == 0:
       logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
@@ -176,29 +179,30 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
 
 
 def infer(valid_queue, model, criterion):
-  objs = utils.AvgrageMeter()
-  top1 = utils.AvgrageMeter()
-  top5 = utils.AvgrageMeter()
-  model.eval()
+    objs = utils.AvgrageMeter()
+    top1 = utils.AvgrageMeter()
+    top5 = utils.AvgrageMeter()
+    model.eval()
+    
+    with torch.no_grad():
+        for step, (input, target) in enumerate(valid_queue):
+            #input = input.cuda()
+            #target = target.cuda(non_blocking=True)
+            input = Variable(input).cuda()
+            target = Variable(target).cuda(non_blocking=True)
+            logits = model(input)
+            loss = criterion(logits, target)
 
-  for step, (input, target) in enumerate(valid_queue):
-    #input = input.cuda()
-    #target = target.cuda(non_blocking=True)
-    input = Variable(input, volatile=True).cuda()
-    target = Variable(target, volatile=True).cuda(async=True)
-    logits = model(input)
-    loss = criterion(logits, target)
+            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+            n = input.size(0)
+            objs.update(loss.item(), n)
+            top1.update(prec1.item(), n)
+            top5.update(prec5.item(), n)
 
-    prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-    n = input.size(0)
-    objs.update(loss.data[0], n)
-    top1.update(prec1.data[0], n)
-    top5.update(prec5.data[0], n)
+            if step % args.report_freq == 0:
+              logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
 
-    if step % args.report_freq == 0:
-      logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
-
-  return top1.avg, objs.avg
+    return top1.avg, objs.avg
 
 
 if __name__ == '__main__':

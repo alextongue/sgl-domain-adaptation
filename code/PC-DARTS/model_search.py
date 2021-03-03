@@ -132,6 +132,10 @@ class Network(nn.Module):
     return model_new
 
   def forward(self, input):
+    # N is batch_size, H is height of image, W is width of image
+    N, _, H, W = input.shape
+    # expand input to 3 channels ( this is for mnist images )
+    input = input.expand(N, 3, H, W)
     s0 = s1 = self.stem(input)
     for i, cell in enumerate(self.cells):
       if cell.reduction:
