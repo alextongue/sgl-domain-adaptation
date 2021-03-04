@@ -88,7 +88,7 @@ def main():
       momentum=args.momentum,
       weight_decay=args.weight_decay)
 
-  train_data = get_train_dataset( args )
+  train_data = get_train_dataset( args.set, args )
 
   num_train = len(train_data) // 1
   indices = list(range(num_train))

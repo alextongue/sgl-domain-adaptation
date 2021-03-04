@@ -37,35 +37,35 @@ class MnistmGetLoader(data.Dataset):
         return self.n_data
 
 
-def get_data_transforms( args ):
+def get_data_transforms( dataset_name, args ):
     train_transform, valid_transform = None, None
-    if args.set == 'cifar10' or args.set == 'cifar100':
+    if dataset_name == 'cifar10' or dataset_name == 'cifar100':
         train_transform, valid_transform = utils._data_transforms_cifar10(args)
-    elif args.set == 'mnist':
+    elif dataset_name == 'mnist':
         train_transform, valid_transform = utils._data_transforms_mnist(args)
-    elif args.set == 'mnistm':
+    elif dataset_name == 'mnistm':
         train_transform, valid_transform = utils._data_transforms_mnistm(args)
     else:
-        assert False and f'Unrecognized dataset: {args.set}'
+        assert False and f'Unrecognized dataset: {dataset_name}'
     return train_transform, valid_transform
 
-def get_train_dataset( args ):
+def get_train_dataset( dataset_name, args ):
     train_data = None
-    train_transform, _ = get_data_transforms( args )
-    if args.set == 'cifar100':
+    train_transform, _ = get_data_transforms( dataset_name, args )
+    if dataset_name == 'cifar100':
         train_data = dset.CIFAR100(root=args.data, train=True, 
                 download=True, transform=train_transform)
-    elif args.set == 'cifar10':
+    elif dataset_name == 'cifar10':
         train_data = dset.CIFAR10(root=args.data, train=True, 
                 download=True, transform=train_transform)
-    elif args.set == 'mnist':
+    elif dataset_name == 'mnist':
         train_data = dset.MNIST(
             root=args.data,
             train=True,
             transform=train_transform,
             download=True
         )
-    elif args.set == 'mnistm':
+    elif dataset_name == 'mnistm':
         mnistm_root = os.path.join( args.data, 'mnist_m' )
         train_list = os.path.join(mnistm_root, 'mnist_m_train_labels.txt')
         train_data = MnistmGetLoader(
@@ -74,5 +74,5 @@ def get_train_dataset( args ):
             transform=train_transform
         )
     else:
-        assert False and f'Unrecognized dataset: {args.set}'
+        assert False and f'Unrecognized dataset: {dataset_name}'
     return train_data

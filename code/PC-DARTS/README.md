@@ -36,11 +36,11 @@ PC-DARTS | 597 | **24.2** | **7.3** | 3.8
 
 ### Validation Results ( from search only ) on MNIST with 5 epochs
 Method | Top-1 Error(%) | Top-5 Error(%) | Time
-PC-DARTS | 99.0 | 99.8 | 40min
+PC-DARTS | 1.0 | 0.2 | 40min
 
 ### Validation Results ( from search only ) on MNIST-M with 5 epochs
 Method | Top-1 Error(%) | Top-5 Error(%) | Time
-PC-DARTS | 97.2 | 99.9 | 40min
+PC-DARTS | 2.8 | 0.1 | 40min
 
 
 Search a good arcitecture on ImageNet by using the search space of DARTS(**First Time!**).
