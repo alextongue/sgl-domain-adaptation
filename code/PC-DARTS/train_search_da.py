@@ -66,6 +66,11 @@ assert args.src_set in [ 'mnist', 'mnistm' ]
 assert args.tgt_set in [ 'mnist', 'mnistm' ]
 
 NUM_CLASSES = 10
+NUM_DOMAINS = 2
+
+# threshold number of epochs after which architecture search
+# begins
+ARCH_EPOCH_THRESH = 1
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -85,8 +90,10 @@ def main():
     # TODO: setup right criterion, model
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()
+    label_criterion = nn.NLLLoss().to( device )
+    domain_criterion = nn.NLLLoss().to( device )
     model = Network(args.init_channels, NUM_CLASSES, args.layers, criterion)
-    model = model.cuda()
+    model = model.to( device )
     logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
     # TODO: setup right optimizer
@@ -95,6 +102,10 @@ def main():
       args.learning_rate,
       momentum=args.momentum,
       weight_decay=args.weight_decay)
+
+    #optimizer = torch.optim.Adam(
+    #        model.parameters(),
+    #        args.learning_rate )
     
     src_train_data = get_train_dataset( args.src_set, args )
     tgt_train_data = get_train_dataset( args.tgt_set, args )
@@ -139,7 +150,8 @@ def main():
         # train step
         train_acc, train_obj = train( src_train_queue, tgt_train_queue,
                 src_valid_queue, tgt_valid_queue,
-                model, architect, criterion, optimizer, lr,epoch)
+                model, architect, label_criterion, 
+                domain_criterion, optimizer, lr,epoch)
         logging.info('train_acc %f', train_acc)
     
         # validation only on last epoch
@@ -155,7 +167,8 @@ def main():
 
 def train( src_train_queue, tgt_train_queue,
         src_valid_queue, tgt_valid_queue,
-        model, architect, criterion, optimizer, 
+        model, architect, label_criterion,
+        domain_criterion, optimizer, 
         lr, epoch ):
     '''
     PC-DARTS training routine for domain adaptation
@@ -172,10 +185,43 @@ def train( src_train_queue, tgt_train_queue,
     tgt_valid_queue_iter = iter( tgt_valid_queue )
 
     for step in range( N ):
+        # zero out gradients
+        optimizer.zero_grad()
+        # compute alpha used in gradient reversal layer
+        p = float(step + epoch * N) / args.epochs / N
+        alpha = 2. / (1. + np.exp(-10 * p)) - 1
+        # get training data
         src_images, src_labels = next( src_train_queue_iter )
         tgt_images, _ = next( tgt_train_queue_iter )
         src_images, src_labels, tgt_images = src_images.to( device ), \
                 src_labels.to( device ), tgt_images.to( device )
+        batch_size = len( src_labels )
+
+        if epoch >= ARCH_EPOCH_THRESH:
+            # TODO:
+            # update architect to take in both src and tgt
+            # validation data
+            pass
+        
+        # train model using src_data
+        src_domain = torch.zeros( batch_size ).long().to( device )
+        # TODO: update model for DA
+        # src_labels_out, src_domain_out = model( src_images, alpha )
+        src_labels_out = torch.randn( batch_size, NUM_CLASSES ).to( device )
+        src_domain_out = torch.randn( batch_size, NUM_DOMAINS ).to( device )
+        src_label_loss = label_criterion( src_labels_out, src_labels )
+        src_domain_loss = domain_criterion( src_domain_out, src_domain )
+
+        # train model using tgt_data
+        tgt_domain = torch.ones( batch_size ).long().to( device )
+        #_, tgt_domain_out = model( tgt_images, alpha )
+        tgt_domain_out = torch.randn( batch_size, NUM_DOMAINS ).to( device )
+        tgt_domain_loss = domain_criterion( tgt_domain_out, tgt_domain )
+
+        # optimize
+        loss = src_label_loss + src_domain_loss + tgt_domain_loss
+        #loss.backward()
+        #optimizer.step() 
         break
     exit( 1 )
 
