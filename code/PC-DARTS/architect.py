@@ -90,3 +90,22 @@ class Architect(object):
 
     return [(x-y).div_(2*R) for x, y in zip(grads_p, grads_n)]
 
+
+class ArchitectDA( Architect ):
+
+    def __init__( self, model, args ):
+        super( ArchitectDA, self ).__init__( model, args )
+
+    def step( self, val_src_imgs, val_src_labels, val_tgt_imgs,
+            alpha, eta=0, network_optimizer=None, unrolled=False ):
+        self.optimizer.zero_grad()
+        if unrolled:
+            assert False and 'Unrolled not supported'
+        else:
+            self._backward_step( val_src_imgs, val_src_labels, val_tgt_imgs, alpha )
+        self.optimizer.step()
+  
+    def _backward_step( self, src_imgs, src_labels, tgt_imgs, alpha ):
+        loss = self.model._loss( src_imgs, src_labels, tgt_imgs, alpha )
+        loss.backward()
+

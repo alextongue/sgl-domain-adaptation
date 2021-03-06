@@ -7,6 +7,8 @@ from genotypes import PRIMITIVES
 from genotypes import Genotype
 from functions import ReverseLayerF
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 def channel_shuffle(x, groups):
     batchsize, num_channels, height, width = x.data.size()
 
@@ -240,10 +242,13 @@ class Network(nn.Module):
 class NetworkFE( Network ):
 
     def __init__(self, C, num_classes, layers, 
-            criterion, steps=4, multiplier=4, stem_multiplier=3):
+            label_criterion, domain_criterion,
+            steps=4, multiplier=4, stem_multiplier=3):
         # init base class
         super(NetworkFE, self).__init__( C, num_classes, layers,
-            criterion, steps, multiplier, stem_multiplier )
+            label_criterion, steps, multiplier, stem_multiplier )
+        self.label_criterion = label_criterion
+        self.domain_criterion = domain_criterion
         self.out_img_size = 1
         self.global_pooling = nn.AdaptiveAvgPool2d( self.out_img_size )
         # calculate output volume of feature extractor
@@ -254,6 +259,7 @@ class NetworkFE( Network ):
         N, _, H, W = input.shape
         # expand input to 3 channels ( this is for mnist images )
         input = input.expand(N, 3, H, W)
+        # PC-DARTS forward logic
         s0 = s1 = self.stem(input)
         for i, cell in enumerate(self.cells):
             if cell.reduction:
@@ -282,16 +288,24 @@ class NetworkFE( Network ):
         out = self.global_pooling(s1)
         # logits = self.classifier(out.view(out.size(0),-1))
         return out
+  
+    def new(self):
+        assert False and 'new not supported'
+  
 
 class DANN( nn.Module ):
 
-    def __init__( self, C, num_classes, layers, criterion ):
+    def __init__( self, C, num_classes, layers, label_criterion,
+            domain_criterion ):
         super( DANN, self ).__init__()
+        self.label_criterion = label_criterion
+        self.domain_criterion = domain_criterion
         # feature extractor
         self.fe = NetworkFE( C, num_classes, layers,
-                criterion )
+                label_criterion, domain_criterion )
         
         out_vol = self.fe.out_vol
+        
         # label classifier
         self.label_classifier = nn.Sequential()
         self.label_classifier.add_module('l_fc1', nn.Linear(out_vol, 100))
@@ -314,11 +328,11 @@ class DANN( nn.Module ):
     def genotype(self):
         return self.fe.genotype()
 
-    #def arch_parameters(self):
-    #    return self.fe._arch_parameters
+    def arch_parameters(self):
+        return self.fe._arch_parameters
 
     def forward( self, x, alpha ):
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         batch_size = len( x )
         fe_out = self.fe( x )
         fe_out = fe_out.view( batch_size, -1 )
@@ -327,5 +341,20 @@ class DANN( nn.Module ):
         domain_out = self.domain_classifier( reverse_fe )
 
         return label_out, domain_out
+    
+    def _loss(self, src_images, src_labels, tgt_images, alpha ):
+        batch_size = len( src_images )
+        src_domain = torch.zeros( batch_size ).long().to( device )
+        tgt_domain = torch.ones( batch_size ).long().to( device )
+        src_labels_out, src_domain_out = self( src_images, alpha )
+        _, tgt_domain_out = self( tgt_images, alpha )
+        src_label_loss = self.label_criterion( src_labels_out, src_labels )
+        src_domain_loss = self.domain_criterion( src_domain_out, src_domain )
+        tgt_domain_loss = self.domain_criterion( tgt_domain_out, tgt_domain )
+        domain_loss = src_domain_loss + tgt_domain_loss 
+        return src_label_loss + tgt_domain_loss
+    
+    def new(self):
+        assert False and 'new not supported'
 
 

@@ -20,7 +20,7 @@ import time
 
 from torch.autograd import Variable
 from model_search import DANN
-from architect import Architect
+from architect import ArchitectDA
 from dataset import get_train_dataset
 
 
@@ -87,13 +87,14 @@ def main():
     logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
     
-    # TODO: setup right criterion, model
+    # setup criterion, model
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()
     label_criterion = nn.NLLLoss().to( device )
     domain_criterion = nn.NLLLoss().to( device )
     #model = NetworkFE(args.init_channels, NUM_CLASSES, args.layers, criterion)
-    model = DANN(args.init_channels, NUM_CLASSES, args.layers, criterion)
+    model = DANN(args.init_channels, NUM_CLASSES, args.layers,
+            label_criterion, domain_criterion)
     model = model.to( device )
     logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
@@ -138,10 +139,10 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
   
-    # architect = Architect(model, args)
-    architect = Architect(model.fe, args)
+    # Use architect for domain adaptation
+    architect = ArchitectDA(model, args)
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     # main loop
     for epoch in range( args.epochs ):
         lr = scheduler.get_lr()[0]
@@ -158,7 +159,9 @@ def main():
     
         # validation only on last epoch
         if args.epochs-epoch<=1:
-          valid_acc, valid_obj = infer(valid_queue, model, criterion)
+          valid_acc, valid_obj = infer( src_valid_queue,
+                  tgt_valid_queue, model, label_criterion,
+                  domain_criterion )
           logging.info('valid_acc %f', valid_acc)
 
         # save model
@@ -178,13 +181,15 @@ def train( src_train_queue, tgt_train_queue,
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
+    label_loss_meter = utils.AvgrageMeter()
+    domain_loss_meter = utils.AvgrageMeter() 
 
-    import pdb; pdb.set_trace()
     N = min( len( src_train_queue ), len( tgt_train_queue ) )
     src_train_queue_iter = iter( src_train_queue )
     tgt_train_queue_iter = iter( tgt_train_queue )
     src_valid_queue_iter = iter( src_valid_queue )
     tgt_valid_queue_iter = iter( tgt_valid_queue )
+    # import pdb; pdb.set_trace()
 
     for step in range( N ):
         # zero out gradients
@@ -200,33 +205,109 @@ def train( src_train_queue, tgt_train_queue,
         batch_size = len( src_labels )
 
         if epoch >= ARCH_EPOCH_THRESH:
-            # TODO:
-            # update architect to take in both src and tgt
-            # validation data
-            pass
-        
+            # update architecture using validation data
+            val_src_imgs, val_src_labels = next( src_valid_queue_iter )
+            val_tgt_imgs, _ = next( tgt_valid_queue_iter )
+            val_src_imgs, val_src_labels, val_tgt_imgs = \
+                    val_src_imgs.to( device ), val_src_labels.to( device ), \
+                    val_tgt_imgs.to( device )
+            architect.step( val_src_imgs, val_src_labels, val_tgt_imgs,
+                alpha )
+
         # train model using src_data
         src_domain = torch.zeros( batch_size ).long().to( device )
-        # TODO: update model for DA
-        # out = model( src_images )
         src_labels_out, src_domain_out = model( src_images, alpha )
-        src_labels_out = torch.randn( batch_size, NUM_CLASSES ).to( device )
-        src_domain_out = torch.randn( batch_size, NUM_DOMAINS ).to( device )
         src_label_loss = label_criterion( src_labels_out, src_labels )
         src_domain_loss = domain_criterion( src_domain_out, src_domain )
 
         # train model using tgt_data
         tgt_domain = torch.ones( batch_size ).long().to( device )
-        #_, tgt_domain_out = model( tgt_images, alpha )
-        tgt_domain_out = torch.randn( batch_size, NUM_DOMAINS ).to( device )
+        _, tgt_domain_out = model( tgt_images, alpha )
         tgt_domain_loss = domain_criterion( tgt_domain_out, tgt_domain )
 
         # optimize
-        loss = src_label_loss + src_domain_loss + tgt_domain_loss
-        #loss.backward()
-        #optimizer.step() 
-        break
-    exit( 1 )
+        domain_loss = src_domain_loss + tgt_domain_loss
+        loss = src_label_loss + domain_loss
+        loss.backward()
+        optimizer.step()
+
+        # calculate accuracy on src labels
+        acc1, acc5 = utils.accuracy( src_labels_out, src_labels, topk=(1, 5) )
+
+        # update stats
+        objs.update( loss.item(), batch_size )
+        top1.update( acc1.item(), batch_size )
+        top5.update( acc5.item(), batch_size )
+        label_loss_meter.update( src_label_loss.item(), batch_size )
+        domain_loss_meter.update( domain_loss.item(), batch_size )
+
+        # report stats
+        if step % args.report_freq == 0:
+            logging.info( 'train %03d %e %e %e %f %f', step, objs.avg,
+                    label_loss_meter.avg, domain_loss_meter.avg,
+                    top1.avg, top5.avg )
+    
+    return top1.avg, objs.avg
+
+def infer( src_val_queue, tgt_val_queue, model,
+        label_criterion, domain_criterion ):
+    '''
+    PC-DARTS inference routine for domain adaptation
+    '''
+    objs = utils.AvgrageMeter()
+    top1 = utils.AvgrageMeter()
+    top5 = utils.AvgrageMeter()
+    label_loss_meter = utils.AvgrageMeter()
+    domain_loss_meter = utils.AvgrageMeter() 
+    model.eval()
+    # alpha doesn't matter here since no backprop
+    alpha = 0
+    N = min( len( src_val_queue ), len( tgt_val_queue ) )
+    src_val_queue_iter = iter( src_val_queue )
+    tgt_val_queue_iter = iter( tgt_val_queue )
+    # import pdb; pdb.set_trace()
+    with torch.no_grad():
+        for step in range( N ):
+            # get validation data
+            src_images, src_labels = next( src_val_queue_iter )
+            tgt_images, _ = next( tgt_val_queue_iter )
+            src_images, src_labels, tgt_images = src_images.to( device ), \
+                    src_labels.to( device ), tgt_images.to( device )
+            batch_size = len( src_labels )
+        
+            # feed model using src_data
+            src_domain = torch.zeros( batch_size ).long().to( device )
+            src_labels_out, src_domain_out = model( src_images, alpha )
+            src_label_loss = label_criterion( src_labels_out, src_labels )
+            src_domain_loss = domain_criterion( src_domain_out, src_domain )
+
+            # feed model using tgt_data
+            tgt_domain = torch.ones( batch_size ).long().to( device )
+            _, tgt_domain_out = model( tgt_images, alpha )
+            tgt_domain_loss = domain_criterion( tgt_domain_out, tgt_domain )
+       
+            # calculate loss
+            domain_loss = src_domain_loss + tgt_domain_loss
+            loss = src_label_loss + domain_loss
+        
+            # calculate accuracy on src labels
+            acc1, acc5 = utils.accuracy( src_labels_out, src_labels, topk=(1, 5) )
+
+            # update stats
+            objs.update( loss.item(), batch_size )
+            top1.update( acc1.item(), batch_size )
+            top5.update( acc5.item(), batch_size )
+            label_loss_meter.update( src_label_loss.item(), batch_size )
+            domain_loss_meter.update( domain_loss.item(), batch_size )
+
+            # report stats
+            if step % args.report_freq == 0:
+                logging.info( 'train %03d %e %e %e %f %f', step, objs.avg,
+                        label_loss_meter.avg, domain_loss_meter.avg,
+                        top1.avg, top5.avg )
+    
+    return top1.avg, objs.avg            
+
 
 if __name__ == '__main__':
     main()
