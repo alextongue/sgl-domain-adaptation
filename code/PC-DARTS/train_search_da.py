@@ -19,7 +19,7 @@ import torch.backends.cudnn as cudnn
 import time
 
 from torch.autograd import Variable
-from model_search import Network
+from model_search import DANN
 from architect import Architect
 from dataset import get_train_dataset
 
@@ -92,7 +92,8 @@ def main():
     criterion = criterion.cuda()
     label_criterion = nn.NLLLoss().to( device )
     domain_criterion = nn.NLLLoss().to( device )
-    model = Network(args.init_channels, NUM_CLASSES, args.layers, criterion)
+    #model = NetworkFE(args.init_channels, NUM_CLASSES, args.layers, criterion)
+    model = DANN(args.init_channels, NUM_CLASSES, args.layers, criterion)
     model = model.to( device )
     logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
@@ -137,7 +138,8 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
   
-    architect = Architect(model, args)
+    # architect = Architect(model, args)
+    architect = Architect(model.fe, args)
 
     import pdb; pdb.set_trace()
     # main loop
@@ -206,7 +208,8 @@ def train( src_train_queue, tgt_train_queue,
         # train model using src_data
         src_domain = torch.zeros( batch_size ).long().to( device )
         # TODO: update model for DA
-        # src_labels_out, src_domain_out = model( src_images, alpha )
+        # out = model( src_images )
+        src_labels_out, src_domain_out = model( src_images, alpha )
         src_labels_out = torch.randn( batch_size, NUM_CLASSES ).to( device )
         src_domain_out = torch.randn( batch_size, NUM_DOMAINS ).to( device )
         src_label_loss = label_criterion( src_labels_out, src_labels )

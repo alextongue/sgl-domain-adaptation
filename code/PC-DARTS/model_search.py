@@ -5,6 +5,7 @@ from operations import *
 from torch.autograd import Variable
 from genotypes import PRIMITIVES
 from genotypes import Genotype
+from functions import ReverseLayerF
 
 def channel_shuffle(x, groups):
     batchsize, num_channels, height, width = x.data.size()
@@ -119,7 +120,8 @@ class Network(nn.Module):
       reduction_prev = reduction
       self.cells += [cell]
       C_prev_prev, C_prev = C_prev, multiplier*C_curr
-
+    
+    self.out_ch = C_prev
     self.global_pooling = nn.AdaptiveAvgPool2d(1)
     self.classifier = nn.Linear(C_prev, num_classes)
 
@@ -233,4 +235,97 @@ class Network(nn.Module):
       reduce=gene_reduce, reduce_concat=concat
     )
     return genotype
+
+# Differentiable architecture for feature extractor
+class NetworkFE( Network ):
+
+    def __init__(self, C, num_classes, layers, 
+            criterion, steps=4, multiplier=4, stem_multiplier=3):
+        # init base class
+        super(NetworkFE, self).__init__( C, num_classes, layers,
+            criterion, steps, multiplier, stem_multiplier )
+        self.out_img_size = 1
+        self.global_pooling = nn.AdaptiveAvgPool2d( self.out_img_size )
+        # calculate output volume of feature extractor
+        self.out_vol = self.out_ch * self.out_img_size * self.out_img_size
+
+    def forward(self, input):
+        # N is batch_size, H is height of image, W is width of image
+        N, _, H, W = input.shape
+        # expand input to 3 channels ( this is for mnist images )
+        input = input.expand(N, 3, H, W)
+        s0 = s1 = self.stem(input)
+        for i, cell in enumerate(self.cells):
+            if cell.reduction:
+                weights = F.softmax(self.alphas_reduce, dim=-1)
+                n = 3
+                start = 2
+                weights2 = F.softmax(self.betas_reduce[0:2], dim=-1)
+                for i in range(self._steps-1):
+                    end = start + n
+                    tw2 = F.softmax(self.betas_reduce[start:end], dim=-1)
+                    start = end
+                    n += 1
+                    weights2 = torch.cat([weights2,tw2],dim=0)
+            else:
+                weights = F.softmax(self.alphas_normal, dim=-1)
+                n = 3
+                start = 2
+                weights2 = F.softmax(self.betas_normal[0:2], dim=-1)
+                for i in range(self._steps-1):
+                    end = start + n
+                    tw2 = F.softmax(self.betas_normal[start:end], dim=-1)
+                    start = end
+                    n += 1
+                    weights2 = torch.cat([weights2,tw2],dim=0)
+            s0, s1 = s1, cell(s0, s1, weights,weights2)
+        out = self.global_pooling(s1)
+        # logits = self.classifier(out.view(out.size(0),-1))
+        return out
+
+class DANN( nn.Module ):
+
+    def __init__( self, C, num_classes, layers, criterion ):
+        super( DANN, self ).__init__()
+        # feature extractor
+        self.fe = NetworkFE( C, num_classes, layers,
+                criterion )
+        
+        out_vol = self.fe.out_vol
+        # label classifier
+        self.label_classifier = nn.Sequential()
+        self.label_classifier.add_module('l_fc1', nn.Linear(out_vol, 100))
+        self.label_classifier.add_module('l_bn1', nn.BatchNorm1d(100))
+        self.label_classifier.add_module('l_relu1', nn.ReLU(True))
+        self.label_classifier.add_module('l_drop1', nn.Dropout())
+        self.label_classifier.add_module('l_fc2', nn.Linear(100, 100))
+        self.label_classifier.add_module('l_bn2', nn.BatchNorm1d(100))
+        self.label_classifier.add_module('l_relu2', nn.ReLU(True))
+        self.label_classifier.add_module('l_fc3', nn.Linear(100, 10))
+        self.label_classifier.add_module('l_softmax', nn.LogSoftmax(dim=1))
+
+        self.domain_classifier = nn.Sequential()
+        self.domain_classifier.add_module('d_fc1', nn.Linear(out_vol, 100))
+        self.domain_classifier.add_module('d_bn1', nn.BatchNorm1d(100))
+        self.domain_classifier.add_module('d_relu1', nn.ReLU(True))
+        self.domain_classifier.add_module('d_fc2', nn.Linear(100, 2))
+        self.domain_classifier.add_module('d_softmax', nn.LogSoftmax(dim=1))
+  
+    def genotype(self):
+        return self.fe.genotype()
+
+    #def arch_parameters(self):
+    #    return self.fe._arch_parameters
+
+    def forward( self, x, alpha ):
+        import pdb; pdb.set_trace()
+        batch_size = len( x )
+        fe_out = self.fe( x )
+        fe_out = fe_out.view( batch_size, -1 )
+        reverse_fe = ReverseLayerF.apply( fe_out, alpha )
+        label_out = self.label_classifier( fe_out )
+        domain_out = self.domain_classifier( reverse_fe )
+
+        return label_out, domain_out
+
 
