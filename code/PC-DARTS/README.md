@@ -34,15 +34,15 @@ DARTSV2 | 574 | 26.7 | 8.7 | 1.0
 SNAS    | 522 | 27.3 | 9.3 |1.5
 PC-DARTS | 597 | **24.2** | **7.3** | 3.8
 
-### Validation Results ( from search only ) on MNIST with 5 epochs
+### New: Validation Results ( from search only ) on MNIST with 5 epochs
 Method | Top-1 Error(%) | Top-5 Error(%) | Time
 PC-DARTS | 1.0 | 0.2 | 40min
 
-### Validation Results ( from search only ) on MNIST-M with 5 epochs
+### New: Validation Results ( from search only ) on MNIST-M with 5 epochs
 Method | Top-1 Error(%) | Top-5 Error(%) | Time
 PC-DARTS | 2.8 | 0.1 | 40min
 
-### Validation Results ( from search only ) for domain adaptation on MNIST to MNIST-M with 5 epochs
+### New: Validation Results ( from search only ) for domain adaptation on MNIST to MNIST-M with 5 epochs
 Method | Top-1 Error(%) MNIST | Top-5 Error(%) MNIST | Top-1 Error(%) MNIST-M | Top-5 Error(%) MNIST-M
 PC-DARTS | 24.0 | 1.1 | 82.5 | 38.3
 
@@ -60,13 +60,13 @@ To run our code, you only need one Nvidia 1080ti(11G memory).
 python train_search.py \\
 ```
 
-#### Search on MNIST
+#### New: Search on MNIST
 To run PC-DARTS on MNIST dataset run the following command:
 ```
 python train_search.py --epochs=5 --batch_size=64 --set='mnist'
 ```
 
-#### Search on MNIST-M
+#### New: Search on MNIST-M
 To run PC-DARTS on MNIST-M dataset run the following command:
 ```
 python train_search.py --epochs=5 --batch_size=64 --set='mnistm'
@@ -84,13 +84,15 @@ python train_search_imagenet.py \\
        --tmp_data_dir /path/to/your/sampled/data \\
        --save log_path \\
 ```
-## Usage for Domain Adaptation
+## New: Usage for Domain Adaptation
 
 #### Search on MNIST ( src domain ) to MNIST-M ( target domain )
 Perform PC-DARTS architecture search on feature extractor component of DANN.
 Note, only first order search is supported.
 
+```
 python train_search_da.py --epochs=5  --batch_size=64 --src_set=mnist --tgt_set=mnistm
+```
 
 #### The evaluation process simply follows that of DARTS.
 
