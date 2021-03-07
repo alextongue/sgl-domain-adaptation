@@ -42,6 +42,14 @@ PC-DARTS | 1.0 | 0.2 | 40min
 Method | Top-1 Error(%) | Top-5 Error(%) | Time
 PC-DARTS | 2.8 | 0.1 | 40min
 
+### Validation Results ( from search only ) for domain adaptation on MNIST to MNIST-M with 5 epochs
+Method | Top-1 Error(%) MNIST | Top-5 Error(%) MNIST | Top-1 Error(%) MNIST-M | Top-5 Error(%) MNIST-M
+PC-DARTS | 24.0 | 1.1 | 82.5 | 38.3
+
+Performance on target domain is quite poor. I think this is because the training of the
+adversarial network is unstable. Specifically the label loss decreases much faster than
+the domain loss. We need to look into how to tune the hyperparameters so that training
+becomes more stable.
 
 Search a good arcitecture on ImageNet by using the search space of DARTS(**First Time!**).
 ## Usage
@@ -76,6 +84,14 @@ python train_search_imagenet.py \\
        --tmp_data_dir /path/to/your/sampled/data \\
        --save log_path \\
 ```
+## Usage for Domain Adaptation
+
+#### Search on MNIST ( src domain ) to MNIST-M ( target domain )
+Perform PC-DARTS architecture search on feature extractor component of DANN.
+Note, only first order search is supported.
+
+python train_search_da.py --epochs=5  --batch_size=64 --src_set=mnist --tgt_set=mnistm
+
 #### The evaluation process simply follows that of DARTS.
 
 ##### Here is the evaluation on CIFAR10:
